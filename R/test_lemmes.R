@@ -1,7 +1,8 @@
 library(dplyr)
 
 # test du fichier produit sur un exemple : 
-sejours_opt <- readxl::read_excel('~/Desktop/sejopt2016.xlsx')
+sejours_opt <- readxl::read_excel('P:/Pressiat/MCO/ciblage_mining/data/sejopt2016.xlsx')
+
 
 a <- tempfile()
 readr::write_tsv(sejours_opt, a)
@@ -20,25 +21,27 @@ sejours_opt <- sejours_opt %>% select(nohop, cle_rsa, commentaire, validation) %
     commentaire_ = stringr::str_replace_all(commentaire_, "\\-", ""),
     commentaire_ = stringi::stri_trans_general(commentaire_,"Latin-ASCII"))
 
-stop_words <- c('de', 'du', 'avec', 'des', 'en', 'kg', 'moins', 
-                'par', 'et', 'un', 'une', 'le', 'la', 'cc', 'pour',
-                'sur', 'sous', 'au', 'a', 'd', 'l', 'aux', 'au')
+
 
 # on découpe le texte mot par mot
 sejours_opt %>% 
   unnest_tokens(word1, commentaire_, token = "ngrams", n = 1)  %>% 
   # on enlève les "stop words"
-  filter(! word1 %in% stop_words) %>% 
+  filter(! word1 %in% c(tm::stopwords('french'), 'dp', 'das', 'ecg')) %>% 
   # toutes les unités / les actes ccam, les codes cim et les chiffres
   filter(! stringr::str_detect(word1, '^[a-zA-Z]{1}\\b')) %>% 
   filter(! stringr::str_detect(word1, '^[a-zA-Z]{4}[0-9]{3}\\b')) %>% 
   filter(! stringr::str_detect(word1, '^[a-zA-Z]{1}[0-9]{2}.*\\b')) %>% 
   filter(! stringr::str_detect(word1, '^[0-9]+.*\\b')) %>% 
-  filter(! stringr::str_detect(word1, '.*(cc|kg)\\b')) %>% 
+  filter(! stringr::str_detect(word1, '.*(cc|kg|mm|dl)\\b')) %>% 
   filter(! stringr::str_detect(word1, '.*(fa|ac)\\b')) -> test1
 
-# lecture du fichier produit à partir du xml Morphalou
-test <- readr::read_csv('~/Github/lemmatisR/results/tidy_morphalou.csv')
+# lecture du fichier produit à partir du xml Morphalou 2.0
+# test <- readr::read_csv('results/tidy_morphalou2.0.csv')
+
+# lecture du fichier produit à partir du csv Morphalou 3.1
+test <- readr::read_csv('results/tidy_morphalou3.1.csv.gz')
+
 # Si le mot présente des formes fléchies, forme fléchies, sinon on place l'unique forme
 # lemmatisée dans la forme fléchie
 test <- test %>% 
