@@ -20,7 +20,8 @@ library(knitr)
 
 ## Global options
 options(max.print="75")
-knitr::opts_knit$set(root.dir = '~/Documents/R/lemmatisR')
+#knitr::opts_knit$set(root.dir = '~/Documents/R/lemmatisR')
+knitr::opts_knit$set(root.dir = '~/Github/lemmatisR')
 
 knitr::opts_chunk$set(echo=TRUE,
                       eval = TRUE,
@@ -336,7 +337,7 @@ par_phrase_mot %>%
   left_join(test2, 
             by = c('word' = 'forme_flechie')) %>% 
   mutate(diff = stringdist::stringsim(word, forme_lemmatise)) %>% 
-  arrange(rn, word, desc(NOMBRE), desc(GENRE), desc(diff)) %>% 
+  arrange(rn, word, desc(NOMBRE), desc(diff)) %>%  # desc(GENRE),
   distinct(rn, .keep_all = T)  %>% 
   mutate(word_2 = stringr::str_extract(word, '[a-z0-9]+')) %>% 
   filter(! stringr::str_detect('[a-z]{1}', word_2)) %>% 
@@ -365,13 +366,104 @@ words_lemmes %>%
     wordcloud::wordcloud(words = df$forme_lemmatise, freq = df$p, min.freq = 0.0012, rot.per = 0)})
 ```
 
+
+## Les formes lémmatisées
+
+On compte les associations entre formes fléchies (mots du corpus) et formes lémmatisées (mots du lexique) lorsque les deux sont renseignés (lemme existant) et que l'une diffère de l'autre.
+
+### Table
+
+```{r}
+count(words_lemmes %>% 
+        filter(!is.na(forme_lemmatise), 
+               word != forme_lemmatise), 
+      word, forme_lemmatise, sort = TRUE) %>% 
+  dtttable()
+```
+
+### Graphes
+
+#### n > 20 occurences
+
+```{r width = 14, height = 9}
+library(igraph)
+library(ggraph)
+
+count(words_lemmes %>% 
+        filter(!is.na(forme_lemmatise), 
+               word != forme_lemmatise), 
+      word, forme_lemmatise, sort = TRUE) %>% 
+  filter(n > 20) %>% 
+  graph_from_data_frame() -> g
+
+a <- grid::arrow(type = "closed", length = unit(.05, "inches"))
+
+ggraph(g, layout = "fr") +
+  geom_edge_link(aes(edge_alpha = n), show.legend = T,
+                 arrow = a, end_cap = circle(.07, 'inches')) +
+  geom_node_point(color = "lightblue", size = 3) +
+  geom_node_text(aes(label = name), vjust = 1, hjust = 1, size = 2) +
+  theme_void() + 
+  ggtitle("Formes fléchies - formes lémmatisées") -> p
+p
+```
+
+#### 11 < n < 21 occurences
+
+
+```{r width = 14, height = 9}
+count(words_lemmes %>% 
+        filter(!is.na(forme_lemmatise), 
+               word != forme_lemmatise), 
+      word, forme_lemmatise, sort = TRUE) %>% 
+  filter(n < 21, n > 11) %>% 
+  graph_from_data_frame() -> g
+
+a <- grid::arrow(type = "closed", length = unit(.05, "inches"))
+
+ggraph(g, layout = "fr") +
+  geom_edge_link(aes(edge_alpha = n), show.legend = T,
+                 arrow = a, end_cap = circle(.07, 'inches')) +
+  geom_node_point(color = "lightblue", size = 3) +
+  geom_node_text(aes(label = name), vjust = 1, hjust = 1, size = 2) +
+  theme_void() + 
+  ggtitle("Formes fléchies - formes lémmatisées") -> p
+p
+```
+
+
+#### 6 <  n < 12 occurences
+
+```{r width = 14, height = 9}
+library(igraph)
+library(ggraph)
+
+count(words_lemmes %>% 
+        filter(!is.na(forme_lemmatise), 
+               word != forme_lemmatise), 
+      word, forme_lemmatise, sort = TRUE) %>% 
+  filter(n < 12, n > 6) %>% 
+  graph_from_data_frame() -> g
+
+a <- grid::arrow(type = "closed", length = unit(.03, "inches"))
+
+ggraph(g, layout = "fr") +
+  geom_edge_link(aes(edge_alpha = n), show.legend = T,
+                 arrow = a, end_cap = circle(.03, 'inches')) +
+  geom_node_point(color = "lightblue", size = 1) +
+  geom_node_text(aes(label = name), vjust = 1, hjust = 1, size = 2) +
+  theme_void() + 
+  ggtitle("Formes fléchies - formes lémmatisées") -> p
+p
+```
+
 # Discussion
 
 ## Sur le processus 1
 
 - Les mots non lémmatisés correspondent le plus souvent à des noms de personnages, des noms de lieux.
 - La méthode développée (rapprocher les formes fléchies des mots du corpus, sélectionner la forme lémmatisée minimisant la distance "stringdist" entre celui-ci et le mot d'origine) ne tient pas compte de la structure des phrases.
-- On observe donc dans les nuages de mots que l'étiquatage grammatical n'est pas satisfaisant : des verbes sont aussi des noms communs (avoir, dire, être). On peut aussi observer que certains adjectifs sont des verbes au participe passé (compris, trouvé), de même pour "or" et "car". Il faudrait tenir compte de la structure morpho-syntaxique pour attribuer correctement le bon étiquetage grammatical à chaque mot, et ainsi tenir compte de l'ordonnocement des mots dans la phrase. 
+- On observe donc dans les nuages de mots que l'étiquatage grammatical n'est pas satisfaisant : des verbes sont aussi des noms communs (avoir, dire, être). On peut aussi observer que certains adjectifs sont des verbes au participe présent (compris, trouvé), de même pour "or" et "car". Il faudrait tenir compte de la structure morpho-syntaxique pour attribuer correctement le bon étiquetage grammatical à chaque mot, et ainsi tenir compte de l'ordonnocement des mots dans la phrase. 
 - Ce problème ne se pose pas lorsqu'un mot ne correspond qu'à une seule étiquette grammaticale (la plupart des adverbes, pronoms et déterminants). Et l'approche proposée permet de réduire le nombre de formes dans un document. Étiqueter toutes les formes conjuguées d'un verbe en son infinitif permet déjà de réduire une part importante du nombre de formes.
 - Et étudier les structures morpho-syntaxique est d'une difficulté plus enlevée (ce que font de bons outils de lemmatisation !).
 
@@ -379,4 +471,4 @@ words_lemmes %>%
 
 - Beaucoup plus simple, on s'attache à rattacher les singuliers et masulin / invariant aux mots.
 - On ne gagne en revanche aucune information grammaticale sur les mots.
-
+- Il y a des erreurs, qu'il faudrait quantifier à partir de la table de la sous-partie "formes lémmatisées".
