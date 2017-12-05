@@ -9,9 +9,9 @@ saveRDS(morphalou, 'sources/Morphalou3.1/morphalou3.1.Rds')
 
 library(tidyr)
 morphalou_ <- morphalou %>% 
-  fill(GRAPHIE, ID, `CATÉGORIE`, `SOUS CATÉGORIE`,
-       LOCUTION, GENRE, `AUTRES LEMMES LIÉS`,
-       `PHONÉTIQUE`, ORIGINES) %>% 
+  fill(GRAPHIE, ID, `CATÉGORIE`,
+       LOCUTION, GENRE,
+       `PHONÉTIQUE`) %>% 
   rename(forme_lemmatise = GRAPHIE, forme_flechie = GRAPHIE_1) %>% 
   mutate(dictionnaire = tolower(`CATÉGORIE`))
 

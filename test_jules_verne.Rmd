@@ -6,7 +6,8 @@ output:
     code_folding: hide
     self_contained: true
     thumbnails: false
-    lightbox: false
+    lightbox: true
+    gallery: true
     mathjax: false
     highlight: tango
     toc_depth: 3
@@ -19,7 +20,7 @@ library(knitr)
 
 ## Global options
 options(max.print="75")
-#knitr::opts_knit$set(root.dir = '~/Github/lemmatisR')
+knitr::opts_knit$set(root.dir = '~/Documents/R/lemmatisR')
 
 knitr::opts_chunk$set(echo=TRUE,
                       eval = TRUE,
@@ -96,7 +97,7 @@ On donne un aperçu sur 30 lignes tirées au sort dans le fichier, en sélection
 
 ```{r}
 # lecture du fichier produit à partir du csv Morphalou 3.1
-test <- readr::read_csv('/Users/guillaumepressiat/Github/lemmatisR/results/tidy_morphalou3.1.csv.gz')
+test <- readr::read_csv('results/tidy_morphalou3.1.csv.gz')
 
 dtttable(
   sample_n(test %>% 
@@ -109,7 +110,9 @@ dtttable(
 
 
 
-## Processus
+## Processus 1
+
+On cherche à rapprocher la forme lémmatisée correspondant la plus proche du mot pour produire un étiquetage grammatical.
 
 ```{r}
 # Si le mot présente des formes fléchies, forme fléchie, sinon on place l'unique forme
@@ -141,7 +144,7 @@ par_phrase_mot %>%
   filter(! word_2 %in% tm::stopwords('french')) -> words_lemmes
 ```
 
-## Nombre de mots / nombre de lemmes
+### Nombre de mots / nombre de lemmes
 
 
 ```{r}
@@ -151,7 +154,7 @@ words_lemmes %>%
   knitr::kable()
 ```
 
-## Aperçu des lemmes trouvés
+### Aperçu des lemmes trouvés
 
 On donne un aperçu sur quelques lignes tirées au sort dans le livre.
 
@@ -164,7 +167,7 @@ dtttable(sample_n(words_lemmes %>%
 ```
 
 
-## Aperçu des mots non lemmatisés
+### Aperçu des mots non lemmatisés
 
 On donne un aperçu de mots non trouvés.
 
@@ -174,11 +177,11 @@ dtttable(count(words_lemmes %>%
                word, sort = T), n = 20)
 ```
 
-# Résultat de l’étiquetage grammatical
+## Résultat de l’étiquetage grammatical
 
 Dans un premier temps observons le résultat de l’étiquetage grammatical
 
-## Catégories
+### Catégories
 
 ```{r}
 words_lemmes %>% 
@@ -190,9 +193,9 @@ words_lemmes %>%
 ```
 
 
-## Verbes
+### Verbes
 
-### Formes infinitives
+#### Formes infinitives
 
 ```{r}
 words_lemmes %>% 
@@ -203,7 +206,7 @@ words_lemmes %>%
     wordcloud::wordcloud(words = df$forme_lemmatise, freq = df$p, min.freq = 0.002, rot.per = 0)})
 ```
 
-### Mode, temps, personne
+#### Mode, temps, personne
 
 ```{r}
 words_lemmes %>% 
@@ -213,7 +216,7 @@ words_lemmes %>%
   knitr::kable()
 ```
 
-## Adverbes
+### Adverbes
 
 ```{r}
 words_lemmes %>% 
@@ -224,7 +227,7 @@ words_lemmes %>%
     wordcloud::wordcloud(words = df$forme_lemmatise, freq = df$p, min.freq = 0.002, rot.per = 0)})
 ```
 
-## Prépositions
+### Prépositions
 
 ```{r}
 words_lemmes %>% 
@@ -235,7 +238,7 @@ words_lemmes %>%
     wordcloud::wordcloud(words = df$forme_lemmatise, freq = df$p, min.freq = 0.0015, rot.per = 0)})
 ```
 
-## Noms communs
+### Noms communs
 
 ```{r}
 words_lemmes %>% 
@@ -246,7 +249,7 @@ words_lemmes %>%
     wordcloud::wordcloud(words = df$forme_lemmatise, freq = df$p, min.freq = 0.002, rot.per = 0)})
 ```
 
-## Adjectifs qualificatifs
+### Adjectifs qualificatifs
 
 ```{r}
 words_lemmes %>% 
@@ -259,7 +262,7 @@ words_lemmes %>%
 
 *N.B.: Passepartout est en fait l’un des personnages principaux du roman.*
 
-## Pronoms
+### Pronoms
 
 ```{r}
 words_lemmes %>% 
@@ -270,7 +273,7 @@ words_lemmes %>%
     wordcloud::wordcloud(words = df$forme_lemmatise, freq = df$p, min.freq = 0.0015, rot.per = 0)})
 ```
 
-## Déterminants
+### Déterminants
 
 ```{r}
 words_lemmes %>% 
@@ -282,7 +285,7 @@ words_lemmes %>%
 ```
 
 
-## Nombres
+### Nombres
 
 ```{r}
 words_lemmes %>% 
@@ -294,7 +297,7 @@ words_lemmes %>%
 ```
 
 
-## Genres
+### Genres
 
 ```{r}
 words_lemmes %>% 
@@ -305,13 +308,75 @@ words_lemmes %>%
   knitr::kable()
 ```
 
+
+## Processus 2
+
+On cherche à rapprocher la forme lémmatisée sans produire d'étiquetage grammatical. On se contente de réduire le nombre de mots possibles (pluriel mis au singulier, féminin au masculin, formes conjuguées à l'infinitif, etc.)
+
+
+```{r}
+# Si le mot présente des formes fléchies, forme fléchie, sinon on place l'unique forme
+# lemmatisée dans la forme fléchie
+test <- test %>% 
+  mutate(forme_flechie = case_when(
+    is.na(forme_flechie) ~ forme_lemmatise,
+    !is.na(forme_flechie) ~ forme_flechie
+))
+
+
+test2 <- test %>% 
+  mutate(nc = nchar(forme_lemmatise)) %>% 
+  distinct(forme_flechie, forme_lemmatise, NOMBRE, GENRE, dictionnaire)
+
+
+# Distance entre le mot orginal et la forme lemmatise
+par_phrase_mot %>% 
+  mutate(nc0 = nchar(word),
+         rn = row_number()) %>% 
+  left_join(test2, 
+            by = c('word' = 'forme_flechie')) %>% 
+  mutate(diff = stringdist::stringsim(word, forme_lemmatise)) %>% 
+  arrange(rn, word, desc(NOMBRE), desc(GENRE), desc(diff)) %>% 
+  distinct(rn, .keep_all = T)  %>% 
+  mutate(word_2 = stringr::str_extract(word, '[a-z0-9]+')) %>% 
+  filter(! stringr::str_detect('[a-z]{1}', word_2)) %>% 
+  filter(! stringr::str_detect('[0-9]+', word_2)) %>% 
+  filter(! word_2 %in% tm::stopwords('french')) -> words_lemmes
+```
+
+
+### Nombre de mots / nombre de lemmes
+
+
+```{r}
+words_lemmes %>% 
+  summarise(nmots = n_distinct(word),
+            nlemmes = n_distinct(forme_lemmatise)) %>% 
+  knitr::kable()
+```
+
+### Nuages de lemmes
+
+```{r}
+words_lemmes %>% 
+  count(forme_lemmatise, sort = T) %>% 
+  mutate(p = n / sum(n)) %>% 
+  (function(df){
+    wordcloud::wordcloud(words = df$forme_lemmatise, freq = df$p, min.freq = 0.0012, rot.per = 0)})
+```
+
 # Discussion
 
+## Sur le processus 1
+
 - Les mots non lémmatisés correspondent le plus souvent à des noms de personnages, des noms de lieux.
-- Vu la méthode développée (rapprocher les formes fléchies des mots du corpus, sélectionner la forme lémmatisée minimisant la distance "stringdist" entre celui-ci et le mot d'origine), la méthode ne tient pas compte de la structure des phrases.
-- On observe donc dans les nuages de mots que l'étiquatage grammatical n'est pas satisfaisant : des verbes sont aussi des noms communs (avoir, dire, être). On peut aussi observer que certains adjectifs sont des verbes au participe passé (compris, trouvé). Il faudrait tenir compte de la structure morpho-syntaxique pour attribuer correctement le bon étiquetage grammatical à chaque mot, et ainsi tenir compte de l'ordonnocement des mots dans la phrase. 
+- La méthode développée (rapprocher les formes fléchies des mots du corpus, sélectionner la forme lémmatisée minimisant la distance "stringdist" entre celui-ci et le mot d'origine) ne tient pas compte de la structure des phrases.
+- On observe donc dans les nuages de mots que l'étiquatage grammatical n'est pas satisfaisant : des verbes sont aussi des noms communs (avoir, dire, être). On peut aussi observer que certains adjectifs sont des verbes au participe passé (compris, trouvé), de même pour "or" et "car". Il faudrait tenir compte de la structure morpho-syntaxique pour attribuer correctement le bon étiquetage grammatical à chaque mot, et ainsi tenir compte de l'ordonnocement des mots dans la phrase. 
 - Ce problème ne se pose pas lorsqu'un mot ne correspond qu'à une seule étiquette grammaticale (la plupart des adverbes, pronoms et déterminants). Et l'approche proposée permet de réduire le nombre de formes dans un document. Étiqueter toutes les formes conjuguées d'un verbe en son infinitif permet déjà de réduire une part importante du nombre de formes.
 - Et étudier les structures morpho-syntaxique est d'une difficulté plus enlevée (ce que font de bons outils de lemmatisation !).
 
+## Sur le processus 2
 
+- Beaucoup plus simple, on s'attache à rattacher les singuliers et masulin / invariant aux mots.
+- On ne gagne en revanche aucune information grammaticale sur les mots.
 

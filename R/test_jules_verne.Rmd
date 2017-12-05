@@ -1,0 +1,289 @@
+---
+title: "Le tour du monde en quatre-vingt jours"
+date: "4 décembre 2017"
+output:
+  rmdformats::readthedown:
+    code_folding: hide
+    self_contained: false
+    thumbnails: false
+    lightbox: true
+    highlight: tango
+    toc_depth: 3
+---
+
+```{r include = F}
+knitr::opts_knit$set(root.dir = '~/Documents/R/lemmatisR')
+knitr::opts_chunk$set(echo = TRUE,
+	             cache = FALSE,
+               prompt = FALSE,
+               tidy = FALSE,
+               comment = NA,
+               message = FALSE,
+               warning = FALSE)
+
+
+dtttable <- function(x, n = 12) DT::datatable(x, extensions = 'Buttons', options = list(
+      #pageLength = nrow(df2()),
+      pageLength = n,
+      dom = 'Bfrtip',
+      buttons = c('copy', 'csv', 'excel', 'colvis')), rownames = F)
+```
+
+## Introduction
+
+- Ceci est un document présentant un test de lémmatisation avec R à partir du lexique [Morphalou 3.1](https://www.ortolang.fr/market/lexicons/morphalou) de Ortolang.
+- Le texte utilisé est "Le tour du monde en quatre-vingt jours" de Jules Verne, récupéré en ligne sur le projet [Gutenberg](https://www.gutenberg.org/).
+
+## Télécharger le livre sur gutenberg project
+
+```{r}
+library(tidyverse)
+library(tidytext)
+# Le tour du monde en quatre-vingts jours
+# book <- gutenberg_download(3456)
+
+# récupérer le livre en latin1
+book <- tibble(text = readr::read_lines('http://www.gutenberg.org/files/3456/3456-8.txt', 
+                          locale = readr::locale(encoding = "latin1")))
+
+# du début à la FIN du livre
+book[632:9888,] %>% 
+  mutate(text = stringi::stri_trans_general(text,"Latin-ASCII"))-> book_
+
+```
+
+## Découpage mot par mot et lemmatisation
+
+### Quelques exemples de mots
+
+Avec le package `tidytext`, on découpe mot par mot.
+
+On applique une regexpr pour enlever les `_` autour de `_mot_` (ce qui correspond à l'italique).
+
+```{r }
+book_ %>% 
+  unnest_tokens(word, text, token = "ngrams",  n = 1) %>% 
+  mutate(word = stringr::str_extract(word, "[a-z0-9]+")) -> words
+
+glimpse(words, width = 600)
+```
+
+### Aperçu de la table lexique
+
+On donne un aperçu sur 30 lignes tirées au sort dans le fichier.
+
+```{r }
+# lecture du fichier produit à partir du csv Morphalou 3.1
+test <- readr::read_csv('../results/tidy_morphalou3.1.csv.gz')
+
+dtttable(
+  sample_n(test %>% 
+         select(forme_lemmatise, dictionnaire, 
+                forme_flechie, GENRE_1, NOMBRE, 
+                TEMPS, PERSONNE),
+       30), n = 30
+  )
+```
+
+### Processus
+
+
+```{r}
+# Si le mot présente des formes fléchies, forme fléchie, sinon on place l'unique forme
+# lemmatisée dans la forme fléchie
+test <- test %>% 
+  mutate(forme_flechie = case_when(
+    is.na(forme_flechie) ~ forme_lemmatise,
+    !is.na(forme_flechie) ~ forme_flechie
+  ))
+
+# nombre de caractères de la forme lemmatisée, on enlève les accents que l'on laissera sur la forme lemmatisée
+test2 <- test %>% 
+  mutate(nc = nchar(forme_lemmatise)) %>% 
+  mutate(forme_flechie = stringi::stri_trans_general(forme_flechie,"Latin-ASCII"))
+
+words %>% 
+  mutate(nc0 = nchar(word),
+         rn = row_number()) %>% 
+  left_join(test2, 
+            by = c('word' = 'forme_flechie')) %>% 
+  # Distance entre le mot orginal et la forme lemmatise
+  mutate(diff = stringdist::stringsim(word, forme_lemmatise)) %>% 
+  arrange(rn, word, desc(NOMBRE), desc(diff)) %>% 
+  distinct(rn, .keep_all = T)  -> words_lemmes
+
+words_lemmes %>% 
+  filter(! word %in% tm::stopwords('french'),
+         # on enlève les mots d'une seule lettre
+         ! stringr::str_detect('[a-z]{1}', word)) -> words_lemmes
+```
+
+
+### Aperçu des lemmes trouvés
+
+On donne un aperçu sur 15 lignes tirées au sort dans le livre.
+
+```{r}
+dtttable(sample_n(words_lemmes %>% 
+                    filter(!is.na(forme_lemmatise)) %>% 
+                    select(word, forme_lemmatise, dictionnaire, 
+                GENRE_1, NOMBRE, 
+                TEMPS, PERSONNE, `PHONÉTIQUE_1`), 600), n = 15)
+```
+
+
+### Aperçu des mots non lemmatisés
+
+On donne un aperçu de mots non trouvés.
+
+```{r}
+dtttable(count(words_lemmes %>% 
+                    filter(is.na(forme_lemmatise)), 
+               word, sort = T), n = 20)
+```
+
+## Résultat de l'étiquetage grammatical
+
+Dans un premier temps observons le résultat de l'étiquetage grammatical
+
+### Catégories / sous-catégories 
+
+```{r}
+words_lemmes %>% 
+  filter(!is.na(forme_lemmatise)) %>% 
+  count(`CATÉGORIE`, sort = T) %>% 
+  mutate(p = n / sum(n)) %>% 
+  head(20) %>% 
+  knitr::kable()
+
+words_lemmes %>% 
+  filter(!is.na(forme_lemmatise)) %>% 
+  count(`CATÉGORIE`, `SOUS CATÉGORIE`, sort = T) %>% 
+  mutate(p = n / sum(n)) %>% 
+  head(20) %>% 
+  knitr::kable()
+
+```
+
+### Verbes fréquents
+
+#### Formes infinitives
+
+```{r}
+words_lemmes %>% 
+  filter(grepl('^verbe', dictionnaire)) %>% 
+  count(forme_lemmatise, sort = T) %>% 
+  mutate(p = n / sum(n)) %>% 
+  (function(df){
+    wordcloud::wordcloud(words = df$forme_lemmatise, freq = df$p, min.freq = 0.002, rot.per = 0)})
+```
+
+#### Mode, temps, personne
+
+```{r}
+words_lemmes %>% 
+  filter(grepl('^verbe', dictionnaire)) %>% 
+  count(MODE, TEMPS, PERSONNE, sort = T) %>% 
+  head(20) %>% 
+  knitr::kable()
+```
+
+### Adverbes
+
+
+```{r}
+words_lemmes %>% 
+  filter(grepl('^adverbe', dictionnaire)) %>% 
+  count(forme_lemmatise, sort = T) %>% 
+  mutate(p = n / sum(n)) %>% 
+  (function(df){
+    wordcloud::wordcloud(words = df$forme_lemmatise, freq = df$p, min.freq = 0.002, rot.per = 0)})
+
+```
+
+### Préposition
+
+
+```{r}
+words_lemmes %>% 
+  filter(grepl('^préposition', dictionnaire)) %>% 
+  count(forme_lemmatise, sort = T) %>% 
+  mutate(p = n / sum(n)) %>% 
+  (function(df){
+    wordcloud::wordcloud(words = df$forme_lemmatise, freq = df$p, min.freq = 0.0015, rot.per = 0)})
+
+```
+
+### Noms communs
+
+```{r}
+words_lemmes %>% 
+  filter(grepl('^nom commun', dictionnaire)) %>% 
+  count(forme_lemmatise, sort = T) %>% 
+  mutate(p = n / sum(n)) %>% 
+  (function(df){
+    wordcloud::wordcloud(words = df$forme_lemmatise, freq = df$p, min.freq = 0.002, rot.per = 0)})
+
+```
+
+### Adjectifs qualificatifs
+
+```{r}
+words_lemmes %>% 
+  filter(grepl('^adjectif qualific', dictionnaire)) %>% 
+  count(forme_lemmatise, sort = T) %>% 
+  mutate(p = n / sum(n)) %>% 
+  (function(df){
+    wordcloud::wordcloud(words = df$forme_lemmatise, freq = df$p, min.freq = 0.002, rot.per = 0)})
+
+```
+
+
+*N.B.: Passepartout est en fait l'un des personnages principaux du roman*.
+
+### Pronoms
+
+```{r}
+words_lemmes %>% 
+  filter(grepl('^pronom', dictionnaire)) %>% 
+  count(forme_lemmatise, sort = T) %>% 
+  mutate(p = n / sum(n)) %>% 
+  (function(df){
+    wordcloud::wordcloud(words = df$forme_lemmatise, freq = df$p, min.freq = 0.0015, rot.per = 0)})
+
+```
+
+### Déterminants
+
+```{r}
+words_lemmes %>% 
+  filter(grepl('^déterminant', dictionnaire)) %>% 
+  count(forme_lemmatise, sort = T) %>% 
+  mutate(p = n / sum(n)) %>% 
+  (function(df){
+    wordcloud::wordcloud(words = df$forme_lemmatise, freq = df$p, min.freq = 0.0015, rot.per = 0)})
+
+```
+
+### Nombres 
+
+```{r}
+words_lemmes %>% 
+  filter(!is.na(forme_lemmatise)) %>% 
+  count(NOMBRE, sort = T) %>% 
+  mutate(p = n / sum(n)) %>% 
+  head(20) %>% 
+  knitr::kable()
+
+```
+
+### Genres 
+
+```{r}
+words_lemmes %>% 
+  filter(!is.na(GENRE_1) & GENRE_1 != '-') %>% 
+  count(GENRE_1, sort = T) %>% 
+  mutate(p = n / sum(n)) %>% 
+  head(20) %>% 
+  knitr::kable()
+```

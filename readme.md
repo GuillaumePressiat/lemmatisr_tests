@@ -4,7 +4,7 @@
 
 **Ceci est un répertoire de tests.**
 
-Répertoire pour lemmatiser à partir du lexique en langue française Morphalou 2.0.
+Répertoire pour lemmatiser à partir des lexiques en langue française Morphalou.
 
 ## Morphalou 2.0
 

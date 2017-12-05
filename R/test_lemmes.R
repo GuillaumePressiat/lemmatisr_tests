@@ -27,7 +27,7 @@ sejours_opt <- sejours_opt %>% select(nohop, cle_rsa, commentaire, validation) %
 sejours_opt %>% 
   unnest_tokens(word1, commentaire_, token = "ngrams", n = 1)  %>% 
   # on enlève les "stop words"
-  filter(! word1 %in% c(tm::stopwords('french'), 'dp', 'das', 'ecg')) %>% 
+  filter(! word1 %in% c(tm::stopwords('french'))) %>% 
   # toutes les unités / les actes ccam, les codes cim et les chiffres
   filter(! stringr::str_detect(word1, '^[a-zA-Z]{1}\\b')) %>% 
   filter(! stringr::str_detect(word1, '^[a-zA-Z]{4}[0-9]{3}\\b')) %>% 
@@ -192,3 +192,99 @@ ggraph(g, layout = "fr") +
   theme_void() + 
   ggtitle("test") -> p
 p
+
+
+library(tidyverse)
+library(tidytext)
+# Le tour du monde en quatre-vingts jours
+book <- gutenberg_download(3456)
+
+book <- tibble(text = readr::read_lines('http://www.gutenberg.org/files/3456/3456-8.txt', 
+                          locale = readr::locale(encoding = "latin1")))
+
+book[632:9888,] %>% 
+  mutate(text = stringi::stri_trans_general(text,"Latin-ASCII"))-> book_
+
+book_ %>% 
+  unnest_tokens(word, text, token = "ngrams",  n = 1) %>% 
+  mutate(word = stringr::str_extract(word, "[a-z0-9]+")) -> words
+
+# lecture du fichier produit à partir du csv Morphalou 3.1
+test <- readr::read_csv('results/tidy_morphalou3.1.csv.gz')
+
+# Si le mot présente des formes fléchies, forme fléchies, sinon on place l'unique forme
+# lemmatisée dans la forme fléchie
+test <- test %>% 
+  mutate(forme_flechie = case_when(
+    is.na(forme_flechie) ~ forme_lemmatise,
+    !is.na(forme_flechie) ~ forme_flechie
+  ))
+
+# nombre de caractères de la forme lemmatisé, on enlève les accents que l'on laissera sur la forme lemmatisée
+test2 <- test %>% 
+  mutate(nc = nchar(forme_lemmatise)) %>% 
+  mutate(forme_flechie = stringi::stri_trans_general(forme_flechie,"Latin-ASCII"))
+
+words %>% 
+  mutate(nc0 = nchar(word),
+         rn = row_number()) %>% 
+  left_join(test2, 
+            by = c('word' = 'forme_flechie')) %>% 
+  # Distance entre le mot orginal et la forme lemmatise
+  mutate(diff = stringdist::stringsim(word, forme_lemmatise)) %>% 
+  arrange(rn, word, desc(diff)) %>% 
+  distinct(rn, .keep_all = T)  -> words_lemmes
+
+words_lemmes %>% 
+  filter(! word %in% tm::stopwords('french'),
+         ! stringr::str_detect('[a-z]{1}', word)) -> words_lemmes
+
+
+words_lemmes %>% 
+  filter(grepl('^verbe', dictionnaire)) %>% 
+  count(forme_lemmatise, sort = T) %>% 
+  mutate(p = n / sum(n)) %>% 
+  (function(df){
+    wordcloud::wordcloud(words = df$forme_lemmatise, freq = df$p, min.freq = 0.002, rot.per = 0)})
+
+words_lemmes %>% 
+  filter(grepl('^adverbe', dictionnaire)) %>% 
+  count(forme_lemmatise, sort = T) %>% 
+  mutate(p = n / sum(n)) %>% 
+  (function(df){
+    wordcloud::wordcloud(words = df$forme_lemmatise, freq = df$p, min.freq = 0.002, rot.per = 0)})
+
+words_lemmes %>% 
+  filter(grepl('^préposition', dictionnaire)) %>% 
+  count(forme_lemmatise, sort = T) %>% 
+  mutate(p = n / sum(n)) %>% 
+  (function(df){
+    wordcloud::wordcloud(words = df$forme_lemmatise, freq = df$p, min.freq = 0.002, rot.per = 0)})
+
+words_lemmes %>% 
+  filter(grepl('^nom commun', dictionnaire)) %>% 
+  count(forme_lemmatise, sort = T) %>% 
+  mutate(p = n / sum(n)) %>% 
+  (function(df){
+    wordcloud::wordcloud(words = df$forme_lemmatise, freq = df$p, min.freq = 0.002, rot.per = 0)})
+
+words_lemmes %>% 
+  filter(grepl('^adjectif qualific', dictionnaire)) %>% 
+  count(forme_lemmatise, sort = T) %>% 
+  mutate(p = n / sum(n)) %>% 
+  (function(df){
+    wordcloud::wordcloud(words = df$forme_lemmatise, freq = df$p, min.freq = 0.002, rot.per = 0)})
+
+words_lemmes %>% 
+  filter(grepl('^pronom', dictionnaire)) %>% 
+  count(forme_lemmatise, sort = T) %>% 
+  mutate(p = n / sum(n)) %>% 
+  (function(df){
+    wordcloud::wordcloud(words = df$forme_lemmatise, freq = df$p, min.freq = 0.002, rot.per = 0)})
+
+words_lemmes %>% 
+  filter(grepl('^déterminant', dictionnaire)) %>% 
+  count(forme_lemmatise, sort = T) %>% 
+  mutate(p = n / sum(n)) %>% 
+  (function(df){
+    wordcloud::wordcloud(words = df$forme_lemmatise, freq = df$p, min.freq = 0.002, rot.per = 0)})
